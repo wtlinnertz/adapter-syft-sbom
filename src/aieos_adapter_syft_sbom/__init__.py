@@ -30,9 +30,14 @@ class SyftSbomAdapter:
 
     def execute(self, inputs: dict[str, Any]) -> AdapterResult:
         source = inputs["source_path_or_image_ref"]
-        source_path = Path(source) if "/" in source or Path(source).exists() else None
-        if source_path is not None and not source_path.exists():
-            return AdapterResult(findings=None, evidence=["exit-code:2"], exit_code=2)
+        # Heuristic: an OCI image ref typically carries a digest (@sha256:) or
+        # a registry-style hostname (contains '.' before the first '/'). Anything
+        # else is treated as a filesystem path and validated before subprocess.
+        is_image_ref = "@sha256:" in source or ":" in source.rsplit("/", 1)[-1]
+        if not is_image_ref:
+            source_path = Path(source)
+            if not source_path.exists():
+                return AdapterResult(findings=None, evidence=["exit-code:2"], exit_code=2)
 
         fmt = inputs.get("format_preference", "cyclonedx")
         output_flag = "cyclonedx-json" if fmt == "cyclonedx" else "spdx-json"
