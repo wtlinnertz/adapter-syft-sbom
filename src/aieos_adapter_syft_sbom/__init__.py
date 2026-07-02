@@ -83,25 +83,39 @@ class SyftSbomAdapter:
         )
 
 
+def _normalize_component(c: dict[str, Any], fallback_ref: str) -> dict[str, Any]:
+    """Fill the AIEOS-required component fields (bom-ref, type, name, version).
+
+    The AIEOS SBOM schema requires these on every component — both entries in
+    components[] and the metadata.component (the scanned subject). syft omits
+    version for some ecosystems and for directory-scan roots; supply
+    conservative defaults so downstream validators don't reject those cases.
+    """
+    c = dict(c)
+    c.setdefault("bom-ref", c.get("purl") or fallback_ref)
+    c.setdefault("type", "library")
+    c.setdefault("name", "unknown")
+    c.setdefault("version", "unknown")
+    return c
+
+
 def ensure_aieos_sbom_shape(doc: dict[str, Any]) -> dict[str, Any]:
     """Ensure CycloneDX 1.6 + AIEOS-required component fields.
 
-    AIEOS requires every component entry to carry bom-ref, type, name, version.
-    syft populates these for most ecosystems but occasionally emits a component
-    without a version; this normalizer supplies 'unknown' as a conservative
-    default so downstream validators don't reject on syft's edge cases.
+    AIEOS requires bom-ref, type, name, version on every component — both the
+    entries in components[] and metadata.component (the scanned subject, which
+    syft emits without a version for directory-scan roots).
     """
     out = dict(doc)
     out.setdefault("bomFormat", "CycloneDX")
     out.setdefault("specVersion", "1.6")
     components_in = out.get("components", []) or []
-    components_out = []
-    for i, c in enumerate(components_in):
-        c = dict(c)
-        c.setdefault("bom-ref", c.get("purl") or f"component-{i}")
-        c.setdefault("type", "library")
-        c.setdefault("name", "unknown")
-        c.setdefault("version", "unknown")
-        components_out.append(c)
-    out["components"] = components_out
+    out["components"] = [
+        _normalize_component(c, f"component-{i}") for i, c in enumerate(components_in)
+    ]
+    metadata = out.get("metadata")
+    if isinstance(metadata, dict) and isinstance(metadata.get("component"), dict):
+        metadata = dict(metadata)
+        metadata["component"] = _normalize_component(metadata["component"], "root-component")
+        out["metadata"] = metadata
     return out
