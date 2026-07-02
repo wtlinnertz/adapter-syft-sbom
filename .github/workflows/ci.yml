@@ -55,7 +55,6 @@ jobs:
 
       - name: Run conformance
         id: conformance
-        continue-on-error: true
         uses: wtlinnertz/aieos-governance-foundation/.github/actions/run-conformance@main
         with:
           adapter-id: adapter-syft-sbom
