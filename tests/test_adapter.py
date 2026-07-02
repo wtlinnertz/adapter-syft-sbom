@@ -43,6 +43,21 @@ def test_ensure_sbom_shape_fills_in_missing_required_fields():
     assert c["version"] == "unknown"
 
 
+def test_ensure_sbom_shape_normalizes_metadata_component():
+    raw = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.6",
+        "metadata": {"component": {"type": "file", "name": "requirements.txt"}},
+        "components": [],
+    }
+    out = ensure_aieos_sbom_shape(raw)
+    mc = out["metadata"]["component"]
+    assert mc["version"] == "unknown"
+    assert mc["bom-ref"] == "root-component"
+    assert mc["type"] == "file"
+    assert mc["name"] == "requirements.txt"
+
+
 def test_execute_happy_path(tmp_path):
     src = tmp_path / "src"
     src.mkdir()
