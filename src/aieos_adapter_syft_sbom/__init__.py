@@ -40,7 +40,9 @@ class SyftSbomAdapter:
                 return AdapterResult(findings=None, evidence=["exit-code:2"], exit_code=2)
 
         fmt = inputs.get("format_preference", "cyclonedx")
-        output_flag = "cyclonedx-json" if fmt == "cyclonedx" else "spdx-json"
+        # Pin CycloneDX to 1.6 — syft defaults to a newer spec (1.7), which the
+        # AIEOS schema (specVersion const "1.6") rejects.
+        output_flag = "cyclonedx-json@1.6" if fmt == "cyclonedx" else "spdx-json"
 
         cmd = [self._syft, source, "-o", output_flag, "-q"]
         try:
@@ -114,8 +116,14 @@ def ensure_aieos_sbom_shape(doc: dict[str, Any]) -> dict[str, Any]:
         _normalize_component(c, f"component-{i}") for i, c in enumerate(components_in)
     ]
     metadata = out.get("metadata")
-    if isinstance(metadata, dict) and isinstance(metadata.get("component"), dict):
+    if isinstance(metadata, dict):
         metadata = dict(metadata)
-        metadata["component"] = _normalize_component(metadata["component"], "root-component")
+        if isinstance(metadata.get("component"), dict):
+            metadata["component"] = _normalize_component(metadata["component"], "root-component")
+        # AIEOS schema models metadata.tools as an array (CycloneDX 1.4 form);
+        # syft emits the 1.5+ object form {components:[...], services:[...]}.
+        tools = metadata.get("tools")
+        if isinstance(tools, dict):
+            metadata["tools"] = list(tools.get("components", [])) + list(tools.get("services", []))
         out["metadata"] = metadata
     return out
